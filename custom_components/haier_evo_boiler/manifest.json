@@ -1,0 +1,13 @@
+{
+  "domain": "haier_evo_boiler",
+  "name": "Haier Evo Boiler",
+  "version": "0.1.0",
+  "config_flow": true,
+  "single_config_entry": true,
+  "dependencies": ["haier_evo"],
+  "after_dependencies": ["haier_evo"],
+  "documentation": "https://github.com/and7ey/haier_evo",
+  "issue_tracker": "https://github.com/and7ey/haier_evo/issues",
+  "codeowners": [],
+  "iot_class": "cloud_push"
+}
