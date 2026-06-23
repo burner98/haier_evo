@@ -28,6 +28,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "Haier Evo is not ready or no supported TechLine S boiler was found"
         )
 
+    hass.config_entries.async_update_entry(
+        entry, title="Haier Evo — котёл TechLine S"
+    )
     adapters = [HaierBoilerAdapter(hass, device) for device in devices]
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = adapters
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

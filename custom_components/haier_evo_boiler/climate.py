@@ -46,7 +46,8 @@ class HaierBoilerClimate(HaierBoilerEntity, ClimateEntity):
         minimum, maximum, step = adapter.range_for(
             CODE_TARGET_CH_TEMP, 20, 85, 1
         )
-        self._attr_min_temp = minimum
+        # TechLine S firmware does not accept a CH setpoint below 35 °C.
+        self._attr_min_temp = max(35.0, minimum)
         self._attr_max_temp = maximum
         self._attr_target_temperature_step = step
 

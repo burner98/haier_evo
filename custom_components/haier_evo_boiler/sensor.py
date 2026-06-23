@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.const import PERCENTAGE, UnitOfTemperature
+from homeassistant.helpers.entity import EntityCategory
 
 from .boiler import HaierBoilerAdapter
 from .const import CODE_ANTIFREEZE, CODE_CURRENT_CH_TEMP, CODE_GAS_POWER
@@ -46,6 +47,7 @@ async def async_setup_entry(hass, entry, async_add_entities) -> None:
                     icon="mdi:snowflake-thermometer",
                     state_class=None,
                 ),
+                HaierBoilerAlarmSensor(adapter),
             ]
         )
     async_add_entities(entities)
@@ -79,3 +81,30 @@ class HaierBoilerNumericSensor(HaierBoilerEntity, SensorEntity):
         if value is None:
             return None
         return int(value) if value.is_integer() else value
+
+
+class HaierBoilerAlarmSensor(HaierBoilerEntity, SensorEntity):
+    """Human-readable current boiler alarm."""
+
+    _attr_name = "Текущая авария"
+    _attr_icon = "mdi:alert-circle-outline"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, adapter: HaierBoilerAdapter) -> None:
+        super().__init__(adapter, "current_alarm")
+
+    @property
+    def native_value(self) -> str:
+        return self.adapter.alarm_summary
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        details = self.adapter.active_alarm_details
+        return {
+            "active_alarm_keys": [item["key"] for item in details],
+            "active_alarm_codes": [item["code"] for item in details if item["code"]],
+            "recommendations": [
+                item["description"] for item in details if item["description"]
+            ],
+            "details": details,
+        }

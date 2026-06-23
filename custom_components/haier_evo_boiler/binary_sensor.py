@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from homeassistant.components.binary_sensor import BinarySensorEntity
+from homeassistant.components.binary_sensor import (
+    BinarySensorDeviceClass,
+    BinarySensorEntity,
+)
 from homeassistant.helpers.entity import EntityCategory
 
 from .boiler import HaierBoilerAdapter
@@ -34,6 +37,7 @@ async def async_setup_entry(hass, entry, async_add_entities) -> None:
                     icon_off="mdi:wrench-check",
                     entity_category=EntityCategory.DIAGNOSTIC,
                 ),
+                HaierBoilerAlarmBinarySensor(adapter),
             ]
         )
     async_add_entities(entities)
@@ -66,3 +70,25 @@ class HaierBoilerBinarySensor(HaierBoilerEntity, BinarySensorEntity):
     @property
     def icon(self) -> str:
         return self.icon_on if self.is_on else self.icon_off
+
+
+class HaierBoilerAlarmBinarySensor(HaierBoilerEntity, BinarySensorEntity):
+    """Problem sensor driven by the active Haier alarm list."""
+
+    _attr_name = "Авария котла"
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, adapter: HaierBoilerAdapter) -> None:
+        super().__init__(adapter, "alarm")
+
+    @property
+    def is_on(self) -> bool:
+        return self.adapter.has_alarm
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        return {
+            "summary": self.adapter.alarm_summary,
+            "details": self.adapter.active_alarm_details,
+        }

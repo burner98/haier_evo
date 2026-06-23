@@ -1,10 +1,10 @@
 {
-  "title": "Haier Evo Boiler",
+  "title": "Haier Evo — котёл TechLine S",
   "config": {
     "step": {
       "user": {
-        "title": "Haier Evo Boiler",
-        "description": "Использует уже настроенную интеграцию Haier Evo и добавляет управление котлом TechLine S."
+        "title": "Haier Evo — котёл TechLine S",
+        "description": "Использует уже настроенную интеграцию Haier Evo и добавляет управление и диагностику котла TechLine S."
       }
     },
     "abort": {
