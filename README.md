@@ -83,9 +83,7 @@ Haier предлагает разные мобильные приложения 
 - После обновления исходной `haier_evo` совместимость надо проверить: компонент использует её внутренние методы.
 - `climate.turn_off` выключает отопительный контур, а не полное питание котла.
 
-<p align="center">
-  <img src="https://it-enterprise.ru/files/HA-haier-boiler.jpg" alt="Haier EVO Boiler" width="600">
-</p>
+![Haier EVO Boiler](screenshot.jpg)
 
 ## Изменения
 
