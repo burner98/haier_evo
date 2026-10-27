@@ -57,7 +57,7 @@ class SocketStatus(Enum):
 class HaierAPI(HomeAssistantView):
     url = "/api/haier_evo"
     name = "/api:haier_evo"
-    requires_auth = False
+    requires_auth = True
 
     def __init__(self) -> None:
         self.haier = None
@@ -176,6 +176,7 @@ class Haier(object):
         self.region: str = region
         self.allow_http: bool = http
         self.allow_http_post: bool = False
+        self.socket_generation = 0
         self.token: str | None = None
         self.tokenexpire: datetime | None = None
         self.refreshtoken: str | None = None
@@ -524,9 +525,11 @@ class Haier(object):
     # noinspection PyMethodMayBeStatic,PyUnusedLocal
     def _on_open(self, ws: WebSocket) -> None:
         self.socket_status = SocketStatus.INITIALIZED
-        _LOGGER.debug("Websocket opened")
+        self.socket_generation += 1
+        _LOGGER.debug("WebSocket opened, generation %d", self.socket_generation)
         for device in self.devices:
             device.init_if_needed()
+            device.write_ha_state()
 
     # noinspection PyUnusedLocal
     def _on_ping(self, ws: WebSocket) -> None:
@@ -534,7 +537,10 @@ class Haier(object):
 
     # noinspection PyMethodMayBeStatic,PyUnusedLocal
     def _on_close(self, ws: WebSocket, close_code: int, close_message: str) -> None:
-        _LOGGER.debug(f"Websocket closed. Code: {close_code}, message: {close_message}")
+        self.socket_status = SocketStatus.NOT_INITIALIZED
+        _LOGGER.debug("WebSocket closed. Code: %s, message: %s", close_code, close_message)
+        for device in self.devices:
+            device.write_ha_state()
 
     def _wait_websocket(self, timeout: float) -> None:
         current = time.time()
@@ -573,21 +579,20 @@ class Haier(object):
             self.socket_app.run_forever(ping_interval=10)
         except Exception as e:
             _LOGGER.error(f"Error connecting to websocket: {e}")
+        finally:
+            self.socket_status = SocketStatus.NOT_INITIALIZED
+            for device in self.devices:
+                device.write_ha_state()
 
-    @retry(
-        retry=retry_if_exception_type(Exception),
-        stop=stop_after_attempt(2),
-        retry_error_callback=lambda _: None,
-        wait=wait_fixed(0.5),
-    )
     def send_message(self, payload: str) -> None:
-        _LOGGER.debug(f"Sending message: {payload}")
+        """Transport success is not a boiler acknowledgement."""
+        if self.socket_status != SocketStatus.INITIALIZED or self.socket_app is None:
+            raise ConnectionError("Haier Evo WebSocket is not connected")
         try:
             self.socket_app.send(payload)
         except Exception as e:
-            _LOGGER.warning(f"Failed to send message: {e}")
-            self.connect_if_needed()
-            raise e
+            _LOGGER.warning("Failed to send WebSocket command: %s", e)
+            raise
 
 
 class HaierDevice(object):

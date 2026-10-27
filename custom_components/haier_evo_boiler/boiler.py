@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 import json
 import logging
@@ -11,6 +12,7 @@ from types import MethodType
 from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 
 from .const import REQUIRED_CODES, SOURCE_DOMAIN
@@ -88,6 +90,11 @@ class HaierBoilerAdapter:
         self._alarm_definitions = self._load_alarm_definitions()
         self._alarm_code_to_key = self._build_alarm_code_index()
         self._active_alarm_keys: set[str] = set()
+        self._closed = False
+        self._refresh_task: asyncio.Task | None = None
+        self._synced_generation: int | None = (
+            self._socket_generation() if self._socket_connected() else None
+        )
 
         self._load_initial_values()
         self._load_initial_alarms()
@@ -131,9 +138,27 @@ class HaierBoilerAdapter:
             sw_version=self.firmware,
         )
 
+    def _socket_connected(self) -> bool:
+        try:
+            return self.device._haier.socket_status.name == "INITIALIZED"
+        except (AttributeError, ReferenceError):
+            return False
+
+    def _socket_generation(self) -> int:
+        try:
+            return int(self.device._haier.socket_generation)
+        except (AttributeError, ReferenceError, ValueError, TypeError):
+            return 0
+
     @property
     def available(self) -> bool:
-        return bool(getattr(self.device, "available", True))
+        """Unavailable if cloud socket is down, device is offline, or data is stale."""
+        return (
+            not self._closed
+            and self._socket_connected()
+            and bool(getattr(self.device, "_available", True))
+            and self._synced_generation == self._socket_generation()
+        )
 
     @property
     def has_alarm(self) -> bool:
@@ -237,6 +262,9 @@ class HaierBoilerAdapter:
 
     def close(self) -> None:
         """Restore the source device when this integration is unloaded."""
+        self._closed = True
+        if self._refresh_task is not None and not self._refresh_task.done():
+            self._refresh_task.cancel()
         if self._original_set_attribute_value is not None:
             self.device._set_attribute_value = self._original_set_attribute_value
         if self._original_on_message is not None:
@@ -248,7 +276,61 @@ class HaierBoilerAdapter:
 
     @callback
     def _source_updated(self) -> None:
+        if self._closed:
+            return
+        if (self._socket_connected()
+                and self._synced_generation != self._socket_generation()
+                and (self._refresh_task is None or self._refresh_task.done())):
+            self._refresh_task = self.hass.async_create_task(
+                self._refresh_after_reconnect(self._socket_generation())
+            )
         self._notify_on_loop()
+
+    async def _refresh_after_reconnect(self, generation: int) -> None:
+        """Reconcile cached state with Evo REST after a WebSocket reconnect."""
+        try:
+            while not self._closed and self._socket_connected():
+                if generation != self._socket_generation():
+                    # A newer connection will trigger its own refresh.
+                    return
+                try:
+                    source = self.device._haier
+                    snapshot = await self.hass.async_add_executor_job(
+                        source.pull_device_data, self.device.device_mac
+                    )
+                    control = _find_control_node(snapshot)
+                    if not control:
+                        raise ValueError("Evo did not return boiler attributes")
+                    if self._closed or generation != self._socket_generation():
+                        return
+                    self.device._get_status(snapshot)
+                    self.control = control
+                    self.values.clear()
+                    self.specs.clear()
+                    self._load_initial_values()
+                    self._alarm_definitions = self._load_alarm_definitions()
+                    self._alarm_code_to_key = self._build_alarm_code_index()
+                    self._load_initial_alarms()
+                    self._synced_generation = generation
+                    return
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    _LOGGER.warning(
+                        "Unable to refresh boiler state after WebSocket reconnect",
+                        exc_info=True,
+                    )
+                    await asyncio.sleep(30)
+        finally:
+            if not self._closed:
+                self._notify_on_loop()
+                if (self._socket_connected()
+                        and self._synced_generation != self._socket_generation()
+                        and generation != self._socket_generation()):
+                    # The socket reconnected again during this refresh.
+                    self.hass.async_create_task(
+                        self._refresh_after_reconnect(self._socket_generation())
+                    )
 
     @callback
     def _notify_on_loop(self) -> None:
@@ -279,10 +361,9 @@ class HaierBoilerAdapter:
         upper = token.upper()
         if upper in self._alarm_code_to_key:
             return self._alarm_code_to_key[upper]
-        match = re.search(r"\[?([A-F]?\d{1,2}|F[A-F0-9])\]?", upper)
-        if match and match.group(1) in self._alarm_code_to_key:
-            return self._alarm_code_to_key[match.group(1)]
-        return None
+        # Allow a vendor description starting with [F1], not arbitrary numbers.
+        match = _ALARM_CODE_RE.match(upper)
+        return self._alarm_code_to_key.get(match.group(1).strip()) if match else None
 
     def _extract_alarm_keys(self, value: Any) -> set[str]:
         found: set[str] = set()
@@ -338,20 +419,15 @@ class HaierBoilerAdapter:
         return containers
 
     def _ingest_alarm_message(self, message: Any) -> None:
-        """Update active alarms from a live Haier WebSocket message."""
+        """Only explicit vendor alarm fields may change the active alarm set."""
         explicit = self._explicit_alarm_containers(message)
-        if explicit:
-            new_keys: set[str] = set()
-            for container in explicit:
-                new_keys.update(self._extract_alarm_keys(container))
-            if new_keys != self._active_alarm_keys:
-                self._active_alarm_keys = new_keys
-                self.notify()
+        if not explicit:
             return
-
-        discovered = self._extract_alarm_keys(message)
-        if discovered and discovered != self._active_alarm_keys:
-            self._active_alarm_keys = discovered
+        new_keys: set[str] = set()
+        for container in explicit:
+            new_keys.update(self._extract_alarm_keys(container))
+        if new_keys != self._active_alarm_keys:
+            self._active_alarm_keys = new_keys
             self.notify()
 
     def raw(self, code: str, default: Any = None) -> Any:
@@ -383,7 +459,9 @@ class HaierBoilerAdapter:
         return minimum, maximum, step
 
     def send(self, code: str, value: Any) -> None:
-        """Send one raw Evo property command through the source WebSocket."""
+        """Send one command without assuming it was applied by the boiler."""
+        if not self.available:
+            raise HomeAssistantError("Haier boiler is unavailable or not synchronized")
         code = str(code)
         if isinstance(value, bool):
             wire_value = "1" if value else "0"
@@ -395,9 +473,7 @@ class HaierBoilerAdapter:
         command = {"commandName": code, "value": wire_value}
         _LOGGER.debug("Sending boiler command %s", command)
         self.device._send_single_command(command)
-
-        self.values[code] = wire_value
-        self.notify()
+        # Wait for the next vendor state update; no optimistic local change.
 
     def send_many(self, commands: list[tuple[str, Any]], delay: float = 0.25) -> None:
         for index, (code, value) in enumerate(commands):

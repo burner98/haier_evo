@@ -1,0 +1,27 @@
+name: Release 0.3.0b
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-release:
+    if: contains(github.event.head_commit.message, 'Release 0.3.0b') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Python syntax and JSON
+        run: |
+          python -m compileall -q custom_components/haier_evo custom_components/haier_evo_boiler tests
+          python -c 'import json; from pathlib import Path; [json.loads(p.read_text()) for p in Path("custom_components").rglob("*.json")]'
+      - name: Run offline regression tests
+        run: python -m unittest discover -s tests -v
+      - name: Create GitHub pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v0.3.0b --target "$GITHUB_SHA" --title "0.3.0b" --notes-file RELEASE_NOTES_0.3.0b.md --prerelease
