@@ -1,6 +1,6 @@
-# Haier Evo Boiler 0.3.0b (pre-release)
+# Haier Evo Boiler 0.3.0 (pre-release)
 
-This beta improves cloud-connection handling and diagnostics in the TechLine S companion. The bundled upstream integration is patched separately (fork manifest 0.3.16b0, upstream base 0.3.15).
+This pre-release improves cloud-connection handling and diagnostics in the TechLine S companion. The bundled upstream integration is patched separately (fork manifest 0.3.16b0, upstream base 0.3.15).
 
 ## Included
 - GET and POST diagnostics require Home Assistant authentication; both remain disabled by default.
