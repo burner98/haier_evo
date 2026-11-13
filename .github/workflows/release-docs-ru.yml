@@ -1,0 +1,29 @@
+name: Русские инструкции к выпуску
+on:
+  push:
+    branches: [migrate/upstream-2.0.0]
+    paths:
+      - 'RELEASE_NOTES_0.4.0b1.md'
+      - 'ПРОВЕРКА_И_ОТКАТ.md'
+      - '.github/workflows/release-docs-ru.yml'
+permissions:
+  contents: read
+jobs:
+  update-notes:
+    name: Обновить описание опубликованного выпуска
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Убедиться, что код опубликованного выпуска не изменён
+        run: git diff --exit-code v0.4.0b1 HEAD -- custom_components tests
+      - name: Обновить только русский текст выпуска
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release edit v0.4.0b1
+          --title 'Котёл Haier 0.4.0b1 · основа 2.0.0'
+          --notes-file RELEASE_NOTES_0.4.0b1.md

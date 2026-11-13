@@ -1,14 +1,14 @@
 {
   "domain": "haier_evo",
   "name": "Haier Evo",
-  "codeowners": ["@and7ey"],
+  "categories": ["climate.heat_pumps_air_conditioning", "climate.water_heaters", "appliances_cleaning"],
+  "codeowners": ["@and7ey", "@AGrigorii", "@temandroid"],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/and7ey/haier_evo",
-  "homekit": {},
-  "iot_class": "cloud_polling",
+  "integration_type": "hub",
+  "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/and7ey/haier_evo/issues",
-  "requirements": ["requests", "websocket-client", "ratelimit"],
-  "version": "0.3.16b0",
-  "zeroconf": []
+  "requirements": [],
+  "version": "2.0.0"
 }

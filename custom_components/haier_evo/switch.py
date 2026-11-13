@@ -1,141 +1,115 @@
-import weakref
+from __future__ import annotations
+
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
-from .const import DOMAIN
+
 from . import api
+from .entity import HaierEntity, async_setup_platform
 
 
-async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entities) -> bool:
-    haier_object = hass.data[DOMAIN][config_entry.entry_id]
-    entities = []
-    for device in haier_object.devices:
-        entities.extend(device.create_entities_switch())
-    entities.append(HttpSwitch(haier_object))
-    entities.append(HttpSwitchPOST(haier_object))
-    async_add_entities(entities)
-    haier_object.write_ha_state()
-    return True
+async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entities) -> None:
+    async_setup_platform(hass, config_entry, async_add_entities, "switch")
 
 
-class HaierSwitch(SwitchEntity):
-    _attr_should_poll = False
+class HaierSwitch(HaierEntity, SwitchEntity):
     _attr_icon = "mdi:toggle-switch"
 
     def __init__(self, device: api.HaierDevice) -> None:
-        self._device = weakref.proxy(device)
-        self._device_attr_name = None
+        super().__init__(device)
 
-        device.add_write_ha_state_callback(self.async_write_ha_state)
-
-    @property
-    def device_info(self) -> dict:
-        return self._device.device_info
-
-    @property
-    def available(self) -> bool:
-        return self._device.available
-
-    async def async_turn_on(self, **kwargs):
-        await self.hass.async_add_executor_job(self.turn_on)
-
-    def turn_on(self) -> None:
+    async def _async_set(self, value: bool) -> None:
         method = getattr(self._device, f"set_{self._device_attr_name}", None)
         if method is not None:
-            method(True)
+            await method(value)
+            self.async_write_ha_state()
 
-    async def async_turn_off(self, **kwargs):
-        await self.hass.async_add_executor_job(self.turn_off)
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._async_set(True)
 
-    def turn_off(self, **kwargs) -> None:
-        method = getattr(self._device, f"set_{self._device_attr_name}", None)
-        if method is not None:
-            method(False)
+    async def async_turn_off(self, **kwargs) -> None:
+        await self._async_set(False)
 
     @property
     def is_on(self) -> bool:
         return bool(getattr(self._device, self._device_attr_name, None))
 
 
-class HaierACLightSwitch(HaierSwitch):
+class HaierACFeatureSwitch(HaierSwitch):
+    """An on/off feature of an AC, named as the Haier app names it (1.5).
+
+    feature: the integration's attribute name (config[feature] is the cloud
+    code, device.<feature>_on the state, set_<feature>_on the command) and the
+    unique_id suffix; fallback: the name when the app has no screen for it.
+    """
+
+    feature: str = ""
+    fallback: str = ""
+
+    def __init__(self, device: api.HaierAC) -> None:
+        super().__init__(device)
+        self._device_attr_name = f"{self.feature}_on"
+        self._attr_unique_id = f"{device.device_id}_{device.device_model}_{self.feature}"
+        self._attr_name = device.app_title(device.config[self.feature], self.fallback)
+
+
+class HaierACLightSwitch(HaierACFeatureSwitch):
     _attr_icon = "mdi:lightbulb"
-
-    def __init__(self, device: api.HaierAC) -> None:
-        super().__init__(device)
-        self._device_attr_name = "light_on"
-        self._attr_unique_id = f"{device.device_id}_{device.device_model}_light"
-        self._attr_name = f"{device.device_name} Подсветка"
+    feature, fallback = "light", "Подсветка"
 
 
-class HaierACSoundSwitch(HaierSwitch):
-
-    def __init__(self, device: api.HaierAC) -> None:
-        super().__init__(device)
-        self._device_attr_name = "sound_on"
-        self._attr_unique_id = f"{device.device_id}_{device.device_model}_sound"
-        self._attr_name = f"{device.device_name} Звуковой сигнал"
+class HaierACSoundSwitch(HaierACFeatureSwitch):
+    feature, fallback = "sound", "Звуковой сигнал"
 
 
-class HaierACQuietSwitch(HaierSwitch):
-
-    def __init__(self, device: api.HaierAC) -> None:
-        super().__init__(device)
-        self._device_attr_name = "quiet_on"
-        self._attr_unique_id = f"{device.device_id}_{device.device_model}_quiet"
-        self._attr_name = f"{device.device_name} Тихий"
+class HaierACQuietSwitch(HaierACFeatureSwitch):
+    # Duplicates the climate preset "sleep" (same code); kept for automations.
+    _attr_entity_registry_enabled_default = False
+    feature, fallback = "quiet", "Тихий"
 
 
-class HaierACTurboSwitch(HaierSwitch):
-
-    def __init__(self, device: api.HaierAC) -> None:
-        super().__init__(device)
-        self._device_attr_name = "turbo_on"
-        self._attr_unique_id = f"{device.device_id}_{device.device_model}_turbo"
-        self._attr_name = f"{device.device_name} Турбо"
+class HaierACTurboSwitch(HaierACFeatureSwitch):
+    # Duplicates the climate preset "boost" (same code); kept for automations.
+    _attr_entity_registry_enabled_default = False
+    feature, fallback = "turbo", "Турбо"
 
 
-class HaierACHealthSwitch(HaierSwitch):
-
-    def __init__(self, device: api.HaierAC) -> None:
-        super().__init__(device)
-        self._device_attr_name = "health_on"
-        self._attr_unique_id = f"{device.device_id}_{device.device_model}_health"
-        self._attr_name = f"{device.device_name} Здоровье"
+class HaierACHealthSwitch(HaierACFeatureSwitch):
+    feature, fallback = "health", "Здоровье"
 
 
-class HaierACComfortSwitch(HaierSwitch):
-
-    def __init__(self, device: api.HaierAC) -> None:
-        super().__init__(device)
-        self._device_attr_name = "comfort_on"
-        self._attr_unique_id = f"{device.device_id}_{device.device_model}_comfort"
-        self._attr_name = f"{device.device_name} Комфорт"
+class HaierACComfortSwitch(HaierACFeatureSwitch):
+    feature, fallback = "comfort", "Комфортный сон"
 
 
-class HaierACCleaningSwitch(HaierSwitch):
-
-    def __init__(self, device: api.HaierAC) -> None:
-        super().__init__(device)
-        self._device_attr_name = "cleaning_on"
-        self._attr_unique_id = f"{device.device_id}_{device.device_model}_cleaning"
-        self._attr_name = f"{device.device_name} Очистка"
+class HaierACCleaningSwitch(HaierACFeatureSwitch):
+    # the app: "Стерильная очистка", a heat exchanger cycle at 56 °C
+    _attr_icon = "mdi:spray-bottle"
+    feature, fallback = "cleaning", "Стерильная очистка"
 
 
-class HaierACAntiFreezeSwitch(HaierSwitch):
-
-    def __init__(self, device: api.HaierAC) -> None:
-        super().__init__(device)
-        self._device_attr_name = "antifreeze_on"
-        self._attr_unique_id = f"{device.device_id}_{device.device_model}_antifreeze"
-        self._attr_name = f"{device.device_name} Антизамерзание"
+class HaierACAntiFreezeSwitch(HaierACFeatureSwitch):
+    # the app: "10 градусов", keeps the room at +10 °C
+    feature, fallback = "antifreeze", "10 градусов"
 
 
-class HaierACAutoHumiditySwitch(HaierSwitch):
+class HaierACAutoHumiditySwitch(HaierACFeatureSwitch):
+    # attribute 31: the cloud's flat list says "Авто влажность", the app's
+    # screen (selfCleaningStatus) "Самоочистка", a heat exchanger cleaning cycle
+    _attr_icon = "mdi:spray-bottle"
+    feature, fallback = "autohumidity", "Самоочистка"
 
-    def __init__(self, device: api.HaierAC) -> None:
-        super().__init__(device)
-        self._device_attr_name = "autohumidity_on"
-        self._attr_unique_id = f"{device.device_id}_{device.device_model}_autohumidity"
-        self._attr_name = f"{device.device_name} Авто влажность"
+
+AC_SWITCHES = (
+    HaierACLightSwitch,
+    HaierACSoundSwitch,
+    HaierACQuietSwitch,
+    HaierACTurboSwitch,
+    HaierACHealthSwitch,
+    HaierACComfortSwitch,
+    HaierACCleaningSwitch,
+    HaierACAntiFreezeSwitch,
+    HaierACAutoHumiditySwitch,
+)
 
 
 class HaierREFSuperCoolingSwitch(HaierSwitch):
@@ -144,7 +118,7 @@ class HaierREFSuperCoolingSwitch(HaierSwitch):
         super().__init__(device)
         self._device_attr_name = "super_cooling"
         self._attr_unique_id = f"{device.device_id}_{device.device_model}_super_cooling_switch"
-        self._attr_name = f"{device.device_name} Супер-охлаждение"
+        self._attr_name = "Супер-охлаждение"
 
 
 class HaierREFSuperFreezeSwitch(HaierSwitch):
@@ -153,7 +127,7 @@ class HaierREFSuperFreezeSwitch(HaierSwitch):
         super().__init__(device)
         self._device_attr_name = "super_freeze"
         self._attr_unique_id = f"{device.device_id}_{device.device_model}_super_freeze_switch"
-        self._attr_name = f"{device.device_name} Супер-заморозка"
+        self._attr_name = "Супер-заморозка"
 
 
 class HaierREFVacationSwitch(HaierSwitch):
@@ -162,53 +136,16 @@ class HaierREFVacationSwitch(HaierSwitch):
         super().__init__(device)
         self._device_attr_name = "vacation_mode"
         self._attr_unique_id = f"{device.device_id}_{device.device_model}_vacation_mode_switch"
-        self._attr_name = f"{device.device_name} Режим Отпуск"
+        self._attr_name = "Режим Отпуск"
 
 
-class HttpSwitch(SwitchEntity):
-    _attr_icon = "mdi:toggle-switch"
+class HaierWHSterilizationSwitch(HaierSwitch):
+    """Sterilization (BPS) of a water heater, 1.0."""
 
-    def __init__(self, haier):
-        self._haier = weakref.proxy(haier)
-        self._attr_unique_id = f"{DOMAIN}_http_switch_get"
-        self._attr_name = "Haier Evo HTTP GET"
+    _attr_icon = "mdi:bacteria-outline"
 
-    @property
-    def is_on(self) -> bool:
-        return self._haier.allow_http
-
-    @property
-    def device_info(self) -> dict:
-        return {
-            "identifiers": {(DOMAIN, f"{DOMAIN}_http_switch")},
-            "name": "Haier Evo HTTP",
-            "manufacturer": "Haier"
-        }
-
-    async def async_turn_on(self, **kwargs):
-        self._haier.allow_http = True
-        self.async_write_ha_state()
-
-    async def async_turn_off(self, **kwargs):
-        self._haier.allow_http = False
-        self.async_write_ha_state()
-
-
-class HttpSwitchPOST(HttpSwitch):
-
-    def __init__(self, haier):
-        super().__init__(haier)
-        self._attr_unique_id = f"{DOMAIN}_http_switch_post"
-        self._attr_name = "Haier Evo HTTP POST"
-
-    @property
-    def is_on(self) -> bool:
-        return self._haier.allow_http_post
-
-    async def async_turn_on(self, **kwargs):
-        self._haier.allow_http_post = True
-        self.async_write_ha_state()
-
-    async def async_turn_off(self, **kwargs):
-        self._haier.allow_http_post = False
-        self.async_write_ha_state()
+    def __init__(self, device: api.HaierDevice) -> None:
+        super().__init__(device)
+        self._device_attr_name = "sterilization_on"
+        self._attr_unique_id = f"{device.device_id}_{device.device_model}_sterilization"
+        self._attr_name = "Дезинфекция (BPS)"

@@ -1,7 +1,7 @@
 {
   "domain": "haier_evo_boiler",
   "name": "Haier Evo — котёл TechLine S",
-  "version": "0.3.0",
+  "version": "0.4.0b1",
   "config_flow": true,
   "single_config_entry": true,
   "dependencies": [
@@ -10,8 +10,8 @@
   "after_dependencies": [
     "haier_evo"
   ],
-  "documentation": "https://github.com/and7ey/haier_evo",
-  "issue_tracker": "https://github.com/and7ey/haier_evo/issues",
+  "documentation": "https://github.com/burner98/haier_evo",
+  "issue_tracker": "https://github.com/burner98/haier_evo/issues",
   "codeowners": [],
   "iot_class": "cloud_push"
 }

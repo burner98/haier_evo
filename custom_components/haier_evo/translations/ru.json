@@ -1,28 +1,43 @@
 {
     "config": {
-        "abort": {
-            "already_configured": "already configured"
-        },
-        "error": {
-            "cannot_connect": "cannot connect",
-            "invalid_auth": "invalid_auth",
-            "unknown": "unknown"
-        },
         "step": {
             "user": {
+                "title": "Аккаунт Haier Evo",
+                "description": "Логин и пароль от приложения Evo. Пароль нужен только для входа и не сохраняется. Если аккаунт заведён через Яндекс ID, пароля у него нет: задайте его через «Забыли пароль» в приложении Evo.",
                 "data": {
-                    "password": "Пароль",
                     "email": "Логин (email)",
+                    "password": "Пароль",
                     "region": "Регион"
                 }
             },
-            "init": {
+            "reauth_confirm": {
+                "title": "Haier Evo: войти заново",
+                "description": "Сохранённый вход для {email} больше не действует. Введите пароль от приложения Evo: он нужен только для входа и не сохраняется.",
                 "data": {
-                    "password": "Пароль",
+                    "password": "Пароль"
+                }
+            },
+            "reconfigure": {
+                "title": "Аккаунт Haier Evo",
+                "data": {
                     "email": "Логин (email)",
+                    "password": "Пароль",
                     "region": "Регион"
                 }
             }
+        },
+        "error": {
+            "invalid_auth": "Неверный email или пароль",
+            "invalid_email": "Укажите email аккаунта Evo",
+            "cannot_connect": "Облако Haier Evo недоступно, попробуйте позже",
+            "too_many_requests": "Haier Evo ответил 429 (слишком много запросов). Подождите несколько минут и повторите",
+            "unknown": "Неожиданная ошибка, подробности в логе"
+        },
+        "abort": {
+            "already_configured": "Этот аккаунт уже добавлен",
+            "reauth_successful": "Вход выполнен",
+            "reconfigure_successful": "Настройки обновлены",
+            "wrong_account": "Для другого аккаунта добавьте новую запись интеграции"
         }
     },
     "entity": {
@@ -47,7 +62,14 @@
                             "position_5": "Пятая позиция",
                             "position_6": "Шестое положение",
                             "position_7": "Седьмая позиция",
-                            "auto": "Авто режим"
+                            "auto": "Авто режим",
+                            "far_left": "Крайнее левое",
+                            "left": "Левое",
+                            "center": "По центру",
+                            "right": "Правое",
+                            "far_right": "Крайнее правое",
+                            "comfort_left": "Комфорт-поток влево",
+                            "comfort_right": "Комфорт-поток вправо"
                         }
                     },
                     "swing_mode": {
@@ -62,7 +84,18 @@
                             "position_4": "Четвертая позиция",
                             "position_5": "Пятая позиция",
                             "auto": "Авто режим",
-                            "special": "Подъем и опускание"
+                            "special": "Подъем и опускание",
+                            "angle_0": "0° — прямо",
+                            "angle_15": "15°",
+                            "angle_30": "30°",
+                            "angle_45": "45°",
+                            "angle_60": "60°",
+                            "angle_75": "75°",
+                            "angle_90": "90° — вниз",
+                            "up": "Вверх",
+                            "down": "Вниз",
+                            "comfort_up": "Комфорт-поток вверх",
+                            "comfort_down": "Комфорт-поток вниз"
                         }
                     }
                 }
@@ -72,9 +105,94 @@
             "conditioner_eco_sensor": {
                 "state": {
                     "off": "Выключен",
-                    "outlining": "Обводящий",
-                    "related": "Сопутствующий",
+                    "outlining": "Обводящий (мимо человека)",
+                    "related": "Сопутствующий (на человека)",
                     "on": "Активен"
+                }
+            }
+        },
+        "water_heater": {
+            "water_heater": {
+                "state": {
+                    "off": "Выключен",
+                    "eco": "Eco (половина бака)",
+                    "performance": "Max (весь бак)"
+                }
+            }
+        },
+        "sensor": {
+            "laundry_state": {
+                "state": {
+                    "off": "Выключена",
+                    "idle": "Ожидание",
+                    "running": "Работает",
+                    "paused": "Пауза",
+                    "finished": "Завершена",
+                    "cancelled": "Отменена"
+                }
+            }
+        }
+    },
+    "exceptions": {
+        "command_rejected": {
+            "message": "{device}: облако Haier Evo отклонило команду (код {code})"
+        },
+        "command_failed": {
+            "message": "Haier Evo: нет связи с облаком, команда не отправлена"
+        },
+        "locked_off": {
+            "message": "{device} выключен: «{attribute}» нельзя изменить, пока он не включён"
+        },
+        "locked_mode": {
+            "message": "{device}: в режиме «{mode}» «{attribute}» изменить нельзя"
+        },
+        "locked_alarm": {
+            "message": "{device} сообщает об ошибке: «{attribute}» изменить нельзя"
+        },
+        "value_not_allowed": {
+            "message": "{device}: значение {value} для «{attribute}» сейчас недоступно, можно: {allowed}"
+        },
+        "locked_by": {
+            "message": "{device}: «{attribute}» нельзя изменить, пока включено «{cause}»"
+        },
+        "laundry_control_off": {
+            "message": "{device}: управление стиральными и сушильными машинами выключено в настройках интеграции"
+        },
+        "laundry_remote_off": {
+            "message": "{device}: на машине выключено удалённое управление, включите его кнопкой на панели"
+        },
+        "laundry_cannot_start": {
+            "message": "{device}: сейчас программу не запустить (состояние: {state})"
+        },
+        "laundry_cannot_pause": {
+            "message": "{device}: сейчас нечего ставить на паузу (состояние: {state})"
+        },
+        "laundry_cannot_resume": {
+            "message": "{device}: сейчас нечего продолжать (состояние: {state})"
+        },
+        "laundry_cannot_cancel": {
+            "message": "{device}: сейчас нечего отменять (состояние: {state})"
+        },
+        "laundry_no_program": {
+            "message": "{device}: сначала выберите программу для запуска"
+        },
+        "laundry_unknown_program": {
+            "message": "{device}: нет программы «{program}»"
+        },
+        "laundry_busy": {
+            "message": "{device}: предыдущая команда ещё выполняется"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Настройки Haier Evo",
+                "description": "Управление стиральными и сушильными машинами — бета: на настоящей машине оно пока не проверялось. Когда оно включено, у каждой машины появляются выбор программы для запуска и кнопки «Старт», «Пауза», «Продолжить» и «Отменить программу». Команда уходит, только если на машине включено удалённое управление.",
+                "data": {
+                    "laundry_control": "Управление стиральными и сушильными машинами (бета)"
+                },
+                "data_description": {
+                    "laundry_control": "Выключено: машины только показываются, им ничего не отправляется."
                 }
             }
         }
