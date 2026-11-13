@@ -1,4 +1,14 @@
-# Haier Evo integration
+# Интеграция Haier Evo
+
+## Котёл TechLine S: проверка предварительного выпуска
+
+В этом форке подготовлена пара **Haier Evo 2.0.0 + haier_evo_boiler 0.4.0b1**.
+Пошаговая [проверка без запуска газа и инструкция отката](ПРОВЕРКА_И_ОТКАТ.md),
+[описание выпуска](RELEASE_NOTES_0.4.0b1.md) и
+[архив обеих интеграций](https://github.com/burner98/haier_evo/releases/tag/v0.4.0b1).
+Установленный Home Assistant автоматически не обновляется. Инструкции ниже по странице
+относятся к исходному проекту; для обновления существующей котельной установки используйте
+инструкцию этого форка по ссылке выше и устанавливайте обе папки компонентов вместе.
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz) [![Release](https://img.shields.io/github/v/release/and7ey/haier_evo)](https://github.com/and7ey/haier_evo/releases/latest) [![Validate](https://github.com/and7ey/haier_evo/actions/workflows/validate.yaml/badge.svg?branch=main)](https://github.com/and7ey/haier_evo/actions/workflows/validate.yaml?query=branch%3Amain) [![Tests](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fand7ey%2Fhaier_evo%2Fbadges%2Ftests.json)](https://github.com/and7ey/haier_evo/actions/workflows/validate.yaml?query=branch%3Amain) [![stability-stable](https://img.shields.io/badge/stability-stable-green.svg)](https://github.com/mkenney/software-guides/blob/master/STABILITY-BADGES.md#stable)\
 [![Home Assistant minimum](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fand7ey%2Fhaier_evo%2Fbadges%2Fha-minimum.json)](#разработка) [![Home Assistant previous but one](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fand7ey%2Fhaier_evo%2Fbadges%2Fha-prev2.json)](#разработка) [![Home Assistant previous](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fand7ey%2Fhaier_evo%2Fbadges%2Fha-prev1.json)](#разработка) [![Home Assistant current](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fand7ey%2Fhaier_evo%2Fbadges%2Fha-current.json)](#разработка) [![Home Assistant next](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fand7ey%2Fhaier_evo%2Fbadges%2Fha-next.json)](#разработка)
 
@@ -8,7 +18,7 @@
 
 [![Открыть репозиторий в HACS вашего Home Assistant](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=and7ey&repository=haier_evo&category=integration)
 
-> **English.** Unofficial Home Assistant integration for the Haier Evo cloud (Russia, Kazakhstan, Belarus): air conditioners, refrigerators, F7 water heaters (tested on ES80V-F7), washing machines and dryers (their state; starting, pausing and cancelling programs is a beta, off by default and not yet checked on a real machine). Install it through HACS as a custom repository (the button above adds it in one click), restart Home Assistant, then add **Haier Evo** in *Settings → Devices & services* and sign in with your Evo account. The rest of this page is in Russian.
+Исходная интеграция работает с облаком Haier Evo в России, Казахстане и Беларуси. Управление запуском, паузой и отменой программ стиральных и сушильных машин остаётся экспериментальным и по умолчанию отключено. Для существующей установки котла не удаляйте и не добавляйте интеграции заново: порядок обновления описан в инструкции этого форка выше.
 
 ## Поддерживаемые устройства
 Интеграция работает с устройствами, которые видит приложение Evo: кондиционерами, холодильниками, водонагревателями (бойлерами), стиральными и сушильными машинами. Насколько проверена конкретная модель — в таблице.
@@ -167,15 +177,7 @@
 
 Что видно в прогоне:
 
-- сводка задачи каждой версии: образ и его digest (точная сборка за `dev` или бетой), версии Home Assistant, Python, pytest и обвязки в контейнере, коммит, а также каждый файл тестов с числом пройденных и непройденных тестов и временем; не прошедшие тесты — с текстом ошибки;
-- аннотации: не прошедший тест — ошибка на его файле `tests/test_*.py` (для следующей версии — предупреждение), прошедшая версия — заметка с числом тестов;
-- задача **Results**: общая таблица по версиям и единый итог — она падает, если не прошла одна из версий, кроме следующей.
-
-Отдельная задача **lint** — ruff с правилами из `pyproject.toml` и mypy, в контейнере одного зафиксированного релиза Home Assistant (`LINT_HA` в workflow): mypy читает типы этого Home Assistant. У кода есть старые ошибки типов, в основном в аннотациях атрибутов Home Assistant; они перечислены в `scripts/mypy-baseline.txt`. Новая ошибка роняет задачу, исправленная — подсказывает обновить список (`scripts/run_lint.sh <версия> --update > scripts/mypy-baseline.txt`). Ошибки сравниваются без номеров строк, так что перенос кода новой ошибкой не считается. Версии ruff и mypy зафиксированы в `requirements_test.txt`; `LINT_HA` поднимается вместе со списком.
-
-Бейджи вверху страницы показывают последний прогон на `main`:
-
-- **Validate** — итог всего CI: проверки HACS, hassfest и тесты;
+- сводка задачи каждой версии: образ и его digest (точная сборка за `dev` или бетой), версии Home Assistant, Python, pytest и…476 tokens truncated… всего CI: проверки HACS, hassfest и тесты;
 - **tests** — сколько тестов пройдено на текущей версии Home Assistant; если на какой-то версии тесты не прошли — сколько пройдено и не пройдено на худшей из них;
 - **Home Assistant** — по бейджу на каждую версию из окна выше. Зелёный — тесты на этой версии прошли; красный и ✗ — не прошли; жёлтый и ✗ — не прошли на следующей версии, она не блокирует. Первый бейдж, `≥` с версией, — минимальная версия из `hacs.json`; его цвет — итог тестов на последнем патче этой ветки, отдельной задачей или в окне, если версия в него входит.
 

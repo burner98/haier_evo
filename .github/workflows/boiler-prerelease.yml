@@ -1,7 +1,11 @@
-name: Boiler migration prerelease
+name: Предварительный выпуск интеграции котла
 on:
   push:
     branches: [migrate/upstream-2.0.0]
+    paths-ignore:
+      - '**.md'
+      - '.github/workflows/release-docs-ru.yml'
+      - '.github/workflows/boiler-prerelease.yml'
   workflow_dispatch:
 permissions:
   contents: read

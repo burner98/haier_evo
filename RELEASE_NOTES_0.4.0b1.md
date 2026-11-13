@@ -1,25 +1,45 @@
-# Boiler 0.4.0b1 — upstream 2.0.0
+# Котёл Haier: предварительный выпуск 0.4.0b1
 
-Based on and7ey/haier_evo v2.0.0, commit a0a16eda5e4979eafd38284524535e9f60dfd322.
-The base integration stays at 2.0.0; companion haier_evo_boiler is 0.4.0b1.
+Основа — and7ey/haier_evo v2.0.0, коммит `a0a16eda5e4979eafd38284524535e9f60dfd322`.
+Версия базовой интеграции — **2.0.0**, дополнительной интеграции котла `haier_evo_boiler` — **0.4.0b1**.
 
-- Awaited aiohttp/asyncio transport and entry.runtime_data for both integrations.
-- Native GB transport keeps descriptions, REST refreshes and WebSocket pushes live without duplicate entities.
-- Companion uses add_listener and removes it on unload, without monkeypatching source methods.
-- The same 10 unique_ids, device identifiers, entity names and platform keys remain. Existing registry entity_ids are reused.
-- Commands require a live cloud, online boiler and synchronized state. Reconnects require a fresh REST read; stale REST cannot overwrite a newer push. Values are never changed optimistically.
-- CI runs the complete upstream suite plus boiler regression tests inside HA 2026.10.4 and 2026.11.1. Publication requires both versions and lint to pass.
+## Что изменилось
 
-## Installation and rollback
+- Обмен данными переведён на асинхронный API; рабочие объекты обеих интеграций хранятся в `entry.runtime_data`.
+- Для типа устройства GB добавлен приём описания, REST-состояния и обновлений WebSocket без создания дублирующих сущностей.
+- Дополнительная интеграция подписывается через `add_listener()` и снимает подписку при выгрузке.
+- Сохранены прежние 10 сущностей, их `unique_id`, идентификаторы устройства, названия и платформы. Существующие `entity_id` берутся из реестра HA.
+- Команды разрешены только при подключённом облаке, доступном котле и синхронизированных данных. После переподключения запрашивается свежее состояние. Устаревший REST-ответ не затирает более новое сообщение устройства.
+- Локальное состояние не меняется заранее: интеграция ждёт данные устройства.
+- Выгрузка базовой интеграции делает старый объект котла недоступным; после её загрузки дополнительная интеграция перезагружается.
 
-This release does not deploy to any installed Home Assistant instance.
-Before a future installation, make and download a full HA backup, including `.storage`, the legacy `haier_evo` token file if present, and both custom component directories. Keep it securely: it contains credentials.
-Install BOTH directories from the release archive as a pair and restart HA. Do not delete or recreate either integration or its entity registry entries.
+## Результаты проверки
 
-Rollback baseline: burner98/haier_evo commit 7ff38716f4c96e81ff47a20775990ec4247ff242 (base 0.3.16b0, companion 0.3.0).
-Restore both component directories AND the pre-upgrade HA backup together, then restart. Upstream 2.0.0 migrates legacy credentials into entry-specific storage and may remove the old token file/password: restoring code alone is not a complete rollback from this 0.x fork. Retain the original backup until the migration is accepted.
+На коммите `d26cfc3a8929910e14447907d8f439796b72f74e`:
+- Home Assistant **2026.10.4** — **336 тестов пройдено**.
+- Home Assistant **2026.11.1** — **336 тестов пройдено**.
+- Проверка стиля кода и типов — успешна.
 
-## Checks without running gas
+[Успешный запуск проверок и публикации](https://github.com/burner98/haier_evo/actions/runs/43481379436).
 
-All automated tests use synthetic device descriptions and mocked cloud transport; they never contact the installed boiler or an EVO account. Verify ten existing entities, saved entity_ids, offline/unavailable behavior, alarm parsing and reconnect reconciliation in an isolated HA test instance.
-Do not send power/heating/setpoint commands to a real boiler merely to test this release. No ignition, combustion, real fault reset or live gas behavior has been verified. Any later hardware check follows the manufacturer's commissioning procedure with a qualified installer. This remains a prerelease until commissioning.
+Тесты работают с подставным облаком и имитатором устройства. Они не подключаются к вашему аккаунту EVO, установленному HA или котлу. Реальное горение и работа с газом не проверялись, поэтому выпуск остаётся предварительным.
+
+## Как проверять
+
+Подробная [пошаговая инструкция на русском](https://github.com/burner98/haier_evo/blob/migrate/upstream-2.0.0/ПРОВЕРКА_И_ОТКАТ.md): проверка текущего HA без изменений, повтор тестов на имитаторе, будущая установка и откат.
+
+Сейчас достаточно проверить успешный запуск тестов по ссылке выше. Для технической проверки не нужно включать отопление, питание через сущность, менять температуру, сбрасывать аварии или подавать газ.
+
+## Будущая установка и откат
+
+Этот выпуск **не устанавливается автоматически**. Установленная конфигурация HA в ходе разработки не менялась.
+
+Перед будущим обновлением:
+1. Создайте полную резервную копию HA и скачайте её на отдельный компьютер. Сохраните ключ/аварийный набор для восстановления, если резервная копия зашифрована.
+2. Убедитесь, что сохранены обе папки компонентов, `.storage` и старый файл токенов `haier_evo`, если он существует. Не публикуйте эти данные: в них могут быть пароли и токены.
+3. Заменяйте **обе** папки из архива выпуска вместе: `custom_components/haier_evo` и `custom_components/haier_evo_boiler`.
+4. Перезапустите HA. Не удаляйте и не создавайте заново интеграции и сущности.
+
+Исходная точка отката — коммит `7ff38716f4c96e81ff47a20775990ec4247ff242`: базовая интеграция **0.3.16b0**, интеграция котла **0.3.0**.
+
+Для полного отката восстановите резервную копию **до обновления**, включая обе папки компонентов и данные HA. Upstream 2.0.0 переносит старые токены в хранилище записи интеграции и может удалить прежний файл токенов/сохранённый пароль. Поэтому возврата одних файлов кода может оказаться недостаточно. Храните исходную копию до завершения проверки.
