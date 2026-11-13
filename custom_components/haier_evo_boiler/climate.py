@@ -23,7 +23,7 @@ from .entity import HaierBoilerEntity
 
 
 async def async_setup_entry(hass, entry, async_add_entities) -> None:
-    adapters: list[HaierBoilerAdapter] = hass.data["haier_evo_boiler"][entry.entry_id]
+    adapters: list[HaierBoilerAdapter] = entry.runtime_data
     async_add_entities([HaierBoilerClimate(adapter) for adapter in adapters])
 
 
@@ -80,16 +80,12 @@ class HaierBoilerClimate(HaierBoilerEntity, ClimateEntity):
         if temperature is None:
             return
         temperature = max(self.min_temp, min(self.max_temp, float(temperature)))
-        await self.hass.async_add_executor_job(
-            self.adapter.send, CODE_TARGET_CH_TEMP, round(temperature)
-        )
+        await self.adapter.send(CODE_TARGET_CH_TEMP, round(temperature))
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         if hvac_mode == HVACMode.OFF:
             # Disable the heating circuit, but do not hard-power-off the boiler.
-            await self.hass.async_add_executor_job(
-                self.adapter.send, CODE_HEATING, False
-            )
+            await self.adapter.send(CODE_HEATING, False)
             return
         if hvac_mode != HVACMode.HEAT:
             raise ValueError(f"Unsupported HVAC mode: {hvac_mode}")
@@ -97,7 +93,7 @@ class HaierBoilerClimate(HaierBoilerEntity, ClimateEntity):
         if not self.adapter.as_bool(CODE_POWER):
             commands.append((CODE_POWER, True))
         commands.append((CODE_HEATING, True))
-        await self.hass.async_add_executor_job(self.adapter.send_many, commands)
+        await self.adapter.send_many(commands)
 
     async def async_turn_on(self) -> None:
         await self.async_set_hvac_mode(HVACMode.HEAT)

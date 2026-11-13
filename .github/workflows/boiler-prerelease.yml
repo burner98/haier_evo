@@ -1,0 +1,45 @@
+name: Boiler migration prerelease
+on:
+  push:
+    branches: [migrate/upstream-2.0.0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ha: ["2026.10.4", "2026.11.1"]
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/run_checks.sh '${{ matrix.ha }}'
+        env:
+          CHECKS_REPORT: /tmp/checks/results.jsonl
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tests-${{ matrix.ha }}
+          path: /tmp/checks/results.jsonl
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/run_lint.sh 2026.11.1
+  publish:
+    needs: [test, lint]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package both integration directories
+        run: zip -r haier_evo-boiler-0.4.0b1.zip custom_components/haier_evo custom_components/haier_evo_boiler
+      - name: Publish tested commit only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create v0.4.0b1 haier_evo-boiler-0.4.0b1.zip
+          --target "$GITHUB_SHA" --title "Boiler 0.4.0b1 · upstream 2.0.0"
+          --notes-file RELEASE_NOTES_0.4.0b1.md --prerelease --latest=false

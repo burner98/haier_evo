@@ -8,7 +8,6 @@ import json
 import logging
 import re
 import time
-from types import MethodType
 from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
@@ -84,8 +83,6 @@ class HaierBoilerAdapter:
         self.values: dict[str, Any] = {}
         self.specs: dict[str, dict[str, Any]] = {}
         self._listeners: set[Callable[[], None]] = set()
-        self._original_set_attribute_value = getattr(device, "_set_attribute_value", None)
-        self._original_on_message = getattr(device, "on_message", None)
 
         self._alarm_definitions = self._load_alarm_definitions()
         self._alarm_code_to_key = self._build_alarm_code_index()
@@ -93,12 +90,13 @@ class HaierBoilerAdapter:
         self._closed = False
         self._refresh_task: asyncio.Task | None = None
         self._synced_generation: int | None = (
-            self._socket_generation() if self._socket_connected() else None
+            self._socket_generation() if self._socket_connected() and device.synced else None
         )
 
         self._load_initial_values()
         self._load_initial_alarms()
-        self._install_hooks()
+        self._remove_source_listener = device.add_listener(self._source_updated)
+        self._source_updated()
 
     @property
     def device_id(self) -> str:
@@ -140,13 +138,13 @@ class HaierBoilerAdapter:
 
     def _socket_connected(self) -> bool:
         try:
-            return self.device._haier.socket_status.name == "INITIALIZED"
+            return self.device._haier.connected and self.device._haier.cloud_available
         except (AttributeError, ReferenceError):
             return False
 
     def _socket_generation(self) -> int:
         try:
-            return int(self.device._haier.socket_generation)
+            return int(self.device._haier.reconnects)
         except (AttributeError, ReferenceError, ValueError, TypeError):
             return 0
 
@@ -156,7 +154,8 @@ class HaierBoilerAdapter:
         return (
             not self._closed
             and self._socket_connected()
-            and bool(getattr(self.device, "_available", True))
+            and self.device.connected
+            and self.device.synced
             and self._synced_generation == self._socket_generation()
         )
 
@@ -230,54 +229,24 @@ class HaierBoilerAdapter:
         alarms = self.control.get("alarms", [])
         self._active_alarm_keys = self._extract_alarm_keys(alarms)
 
-    def _install_hooks(self) -> None:
-        adapter = self
-        original_set = self._original_set_attribute_value
-        original_message = self._original_on_message
-
-        def patched_set_attribute_value(device_self: Any, code: str, value: Any) -> None:
-            adapter.values[str(code)] = value
-            if callable(original_set):
-                try:
-                    original_set(code, value)
-                except Exception:
-                    _LOGGER.debug("Source attribute handler failed", exc_info=True)
-
-        def patched_on_message(device_self: Any, message_dict: Any) -> Any:
-            result = None
-            if callable(original_message):
-                result = original_message(message_dict)
-            try:
-                adapter._ingest_alarm_message(message_dict)
-            except Exception:
-                _LOGGER.debug("Unable to parse boiler alarm message", exc_info=True)
-            return result
-
-        self.device._set_attribute_value = MethodType(
-            patched_set_attribute_value, self.device
-        )
-        if callable(original_message):
-            self.device.on_message = MethodType(patched_on_message, self.device)
-        self.device.add_write_ha_state_callback(self._source_updated)
-
     def close(self) -> None:
-        """Restore the source device when this integration is unloaded."""
+        """Detach listeners and stop reconciliation when unloaded."""
+        if self._closed:
+            return
         self._closed = True
         if self._refresh_task is not None and not self._refresh_task.done():
             self._refresh_task.cancel()
-        if self._original_set_attribute_value is not None:
-            self.device._set_attribute_value = self._original_set_attribute_value
-        if self._original_on_message is not None:
-            self.device.on_message = self._original_on_message
-        callbacks = getattr(self.device, "_write_ha_state_callbacks", None)
-        if isinstance(callbacks, list) and self._source_updated in callbacks:
-            callbacks.remove(self._source_updated)
+        self._remove_source_listener()
+        self._notify_on_loop()
         self._listeners.clear()
 
     @callback
     def _source_updated(self) -> None:
         if self._closed:
             return
+        self.control = _find_control_node(self.device.status_data) or self.control
+        self._load_initial_values()
+        self._active_alarm_keys = self._extract_alarm_keys(self.device.alarms)
         if (self._socket_connected()
                 and self._synced_generation != self._socket_generation()
                 and (self._refresh_task is None or self._refresh_task.done())):
@@ -295,15 +264,17 @@ class HaierBoilerAdapter:
                     return
                 try:
                     source = self.device._haier
-                    snapshot = await self.hass.async_add_executor_job(
-                        source.pull_device_data, self.device.device_mac
-                    )
+                    started = time.monotonic()
+                    snapshot = await source.client.async_get_device_status(self.device.device_mac)
                     control = _find_control_node(snapshot)
                     if not control:
                         raise ValueError("Evo did not return boiler attributes")
                     if self._closed or generation != self._socket_generation():
                         return
-                    self.device._get_status(snapshot)
+                    if self.device.changed_at > started:
+                        # A push arrived during REST: read again rather than overwrite it.
+                        continue
+                    self.device.update_from_backend(snapshot)
                     self.control = control
                     self.values.clear()
                     self.specs.clear()
@@ -328,7 +299,7 @@ class HaierBoilerAdapter:
                         and self._synced_generation != self._socket_generation()
                         and generation != self._socket_generation()):
                     # The socket reconnected again during this refresh.
-                    self.hass.async_create_task(
+                    self._refresh_task = self.hass.async_create_task(
                         self._refresh_after_reconnect(self._socket_generation())
                     )
 
@@ -458,7 +429,7 @@ class HaierBoilerAdapter:
             return default_min, default_max, default_step
         return minimum, maximum, step
 
-    def send(self, code: str, value: Any) -> None:
+    async def send(self, code: str, value: Any) -> None:
         """Send one command without assuming it was applied by the boiler."""
         if not self.available:
             raise HomeAssistantError("Haier boiler is unavailable or not synchronized")
@@ -472,14 +443,14 @@ class HaierBoilerAdapter:
 
         command = {"commandName": code, "value": wire_value}
         _LOGGER.debug("Sending boiler command %s", command)
-        self.device._send_single_command(command)
+        await self.device._send_single_command(command)
         # Wait for the next vendor state update; no optimistic local change.
 
-    def send_many(self, commands: list[tuple[str, Any]], delay: float = 0.25) -> None:
+    async def send_many(self, commands: list[tuple[str, Any]], delay: float = 0.25) -> None:
         for index, (code, value) in enumerate(commands):
-            self.send(code, value)
+            await self.send(code, value)
             if index < len(commands) - 1 and delay:
-                time.sleep(delay)
+                await asyncio.sleep(delay)
 
     def diagnostic_dump(self) -> str:
         """Return a compact diagnostic representation without credentials."""
