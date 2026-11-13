@@ -2,7 +2,7 @@
 import asyncio
 from copy import deepcopy
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
@@ -13,6 +13,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.haier_evo.device import HaierDevice
 from custom_components.haier_evo_boiler import async_setup_entry
 from custom_components.haier_evo_boiler.boiler import HaierBoilerAdapter
+from custom_components.haier_evo_boiler.climate import HaierBoilerClimate
 
 MAC = "00:00:5e:00:53:03"
 KEYS = {
@@ -158,6 +159,17 @@ async def test_missing_source_retries(hass):
         await async_setup_entry(hass, entry)
 
 
+async def test_heating_off_and_temperature_bounds(boiler):
+    adapter, _, hub = boiler
+    entity = HaierBoilerClimate(adapter)
+    await entity.async_set_temperature(temperature=10)
+    assert hub.async_send.call_args.args[0]["command"] == {"commandName": "7", "value": "35"}
+    await entity.async_turn_off()
+    assert hub.async_send.call_args.args[0]["command"] == {"commandName": "125", "value": "0"}
+    # Heating OFF must not switch off the boiler's antifreeze protection.
+    assert adapter.as_bool("101")
+
+
 async def test_ten_existing_registry_ids_survive(hass, boiler):
     adapter, device, hub = boiler
     source = MockConfigEntry(domain="haier_evo", data={}, title="Evo", state=ConfigEntryState.LOADED)
@@ -180,6 +192,14 @@ async def test_ten_existing_registry_ids_survive(hass, boiler):
     assert {item.unique_id: item.entity_id for item in entries} == old_ids
     assert len(entries) == 10
     assert all(hass.states.get(eid) is not None for eid in old_ids.values())
+    # A source reload invalidates the old device immediately, then schedules
+    # companion reload once the source entry is ready again.
+    with patch.object(hass.config_entries, "async_schedule_reload") as reload:
+        source._async_set_state(hass, ConfigEntryState.UNLOAD_IN_PROGRESS, None)
+        assert not entry.runtime_data[0].available
+        assert not device._listeners
+        source._async_set_state(hass, ConfigEntryState.LOADED, None)
+        reload.assert_called_once_with(entry.entry_id)
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
     assert not device._listeners

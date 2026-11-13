@@ -15,6 +15,8 @@ PLATFORMS = [Platform.CLIMATE, Platform.SWITCH, Platform.SENSOR, Platform.BINARY
 
 def _find_source_devices(hass: HomeAssistant):
     for source_entry in hass.config_entries.async_entries(SOURCE_DOMAIN):
+        if source_entry.state is not ConfigEntryState.LOADED:
+            continue
         source_object = getattr(source_entry, "runtime_data", None)
         for device in getattr(source_object, "devices", []):
             if is_supported_boiler_device(device):
@@ -55,7 +57,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if source.disabled_by is None
         ):
             reload_scheduled = True
-            entry.async_create_task(hass, hass.config_entries.async_reload(entry.entry_id))
+            hass.config_entries.async_schedule_reload(entry.entry_id)
 
     for source in hass.config_entries.async_entries(SOURCE_DOMAIN):
         entry.async_on_unload(source.async_on_state_change(source_changed))

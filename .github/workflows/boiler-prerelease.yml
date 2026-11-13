@@ -39,7 +39,9 @@ jobs:
       - name: Publish tested commit only
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh release create v0.4.0b1 haier_evo-boiler-0.4.0b1.zip
-          --target "$GITHUB_SHA" --title "Boiler 0.4.0b1 · upstream 2.0.0"
-          --notes-file RELEASE_NOTES_0.4.0b1.md --prerelease --latest=false
+        run: |
+          head=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/migrate/upstream-2.0.0" --jq .object.sha)
+          test "$head" = "$GITHUB_SHA"
+          gh release create v0.4.0b1 haier_evo-boiler-0.4.0b1.zip \
+            --target "$GITHUB_SHA" --title "Boiler 0.4.0b1 · upstream 2.0.0" \
+            --notes-file RELEASE_NOTES_0.4.0b1.md --prerelease --latest=false
