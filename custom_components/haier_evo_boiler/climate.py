@@ -33,6 +33,7 @@ class HaierBoilerClimate(HaierBoilerEntity, ClimateEntity):
     _attr_name = "Отопление"
     _attr_icon = "mdi:radiator"
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE
@@ -58,6 +59,14 @@ class HaierBoilerClimate(HaierBoilerEntity, ClimateEntity):
     @property
     def target_temperature(self) -> float | None:
         return self.adapter.as_float(CODE_TARGET_CH_TEMP)
+
+    @property
+    def native_current_temperature(self) -> float | None:
+        return self.current_temperature
+
+    @property
+    def native_target_temperature(self) -> float | None:
+        return self.target_temperature
 
     @property
     def hvac_mode(self) -> HVACMode:

@@ -5,12 +5,13 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.haier_evo.device import HaierDevice
-from custom_components.haier_evo_boiler import async_setup_entry, async_unload_entry
+from custom_components.haier_evo_boiler import async_setup_entry
 from custom_components.haier_evo_boiler.boiler import HaierBoilerAdapter
 
 MAC = "00:00:5e:00:53:03"
@@ -159,7 +160,7 @@ async def test_missing_source_retries(hass):
 
 async def test_ten_existing_registry_ids_survive(hass, boiler):
     adapter, device, hub = boiler
-    source = MockConfigEntry(domain="haier_evo", data={}, title="Evo")
+    source = MockConfigEntry(domain="haier_evo", data={}, title="Evo", state=ConfigEntryState.LOADED)
     source.add_to_hass(hass)
     source.runtime_data = hub
     entry = MockConfigEntry(domain="haier_evo_boiler", data={}, title="Boiler")
@@ -173,12 +174,12 @@ async def test_ten_existing_registry_ids_survive(hass, boiler):
             suggested_object_id=f"existing_{key}",
         ).entity_id
     adapter.close()
-    assert await async_setup_entry(hass, entry)
+    assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     entries = er.async_entries_for_config_entry(registry, entry.entry_id)
     assert {item.unique_id: item.entity_id for item in entries} == old_ids
     assert len(entries) == 10
     assert all(hass.states.get(eid) is not None for eid in old_ids.values())
-    assert await async_unload_entry(hass, entry)
+    assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
     assert not device._listeners
