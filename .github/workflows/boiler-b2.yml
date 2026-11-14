@@ -1,0 +1,62 @@
+name: Выпуск котла 0.4.0b2
+on:
+  push:
+    branches: [release/0.4.0b2]
+    paths-ignore:
+      - '**.md'
+      - '.github/workflows/release-docs-ru.yml'
+      - '.github/workflows/boiler-prerelease.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ha: ["2026.10.4", "2026.11.1"]
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/run_checks.sh '${{ matrix.ha }}'
+        env:
+          CHECKS_REPORT: /tmp/checks/results.jsonl
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tests-${{ matrix.ha }}
+          path: /tmp/checks/results.jsonl
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/run_lint.sh 2026.11.1
+  package-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Проверка Home Assistant
+        uses: home-assistant/actions/hassfest@86d4564712fa02543c808e3a693dd04f9d3f8361
+      - name: Проверка HACS
+        uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa
+        with:
+          category: integration
+          comment: false
+  publish:
+    needs: [test, lint, package-validation]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Упаковать обе интеграции
+        run: zip -r haier_evo-boiler-0.4.0b2.zip custom_components/haier_evo custom_components/haier_evo_boiler
+      - name: Опубликовать проверенный коммит
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          head=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/release/0.4.0b2" --jq .object.sha)
+          test "$head" = "$GITHUB_SHA"
+          gh release create v0.4.0b2 haier_evo-boiler-0.4.0b2.zip \
+            --target "$GITHUB_SHA" --title "Котёл Haier 0.4.0b2 · основа 2.0.0" \
+            --notes-file RELEASE_NOTES_0.4.0b2.md --prerelease --latest=false

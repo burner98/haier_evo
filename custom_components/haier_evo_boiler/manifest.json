@@ -13,5 +13,5 @@
   "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/burner98/haier_evo/issues",
   "single_config_entry": true,
-  "version": "0.4.0b1"
+  "version": "0.4.0b2"
 }
