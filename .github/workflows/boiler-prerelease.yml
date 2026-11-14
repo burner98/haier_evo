@@ -32,15 +32,16 @@ jobs:
       - uses: actions/checkout@v4
       - run: scripts/run_lint.sh 2026.11.1
   publish:
+    if: github.event_name == 'workflow_dispatch'
     needs: [test, lint]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Package both integration directories
+      - name: Упаковать обе интеграции
         run: zip -r haier_evo-boiler-0.4.0b1.zip custom_components/haier_evo custom_components/haier_evo_boiler
-      - name: Publish tested commit only
+      - name: Опубликовать проверенный коммит
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
