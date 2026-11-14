@@ -1,15 +1,17 @@
 # Haier Evo integration
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs) [![stability-beta](https://img.shields.io/badge/stability-beta-33bbff.svg)](https://github.com/mkenney/software-guides/blob/master/STABILITY-BADGES.md#beta)
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs) [![stability-stable](https://img.shields.io/badge/stability-stable-green.svg)](https://github.com/mkenney/software-guides/blob/master/STABILITY-BADGES.md#stable)
 
 Неофициальная интеграция для работы [Haier Evo](https://haieronline.ru/evo-iot/) (RU, KZ, BY).
 
-Бета-версия: может работать некорректно.
+Поддерживаются водонагреватели (бойлеры) серии F7.
 
 ## Поддерживаемые устройства
 Ниже приведен список типов устройств, работа с которыми была **проверена пользователями**:
 
 - Кондиционеры
 - Холодильники
+- Водонагреватели (бойлеры) серии F7 — проверено на ES80V-F7
+- Стиральные и сушильные машины: состояние; запуск, пауза и отмена программ — бета, по умолчанию выключено
 
 В действительности интеграция должна поддерживать больше устройств. 
 Если интеграция некорректно работает с вашим устройством или поддерживает не все функции - сообщите в [Issues](https://github.com/and7ey/haier_evo/issues) об этом. 

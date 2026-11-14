@@ -1,28 +1,43 @@
 {
     "config": {
-        "abort": {
-            "already_configured": "already configured"
-        },
-        "error": {
-            "cannot_connect": "cannot connect",
-            "invalid_auth": "invalid_auth",
-            "unknown": "unknown"
-        },
         "step": {
             "user": {
+                "title": "Haier Evo account",
+                "description": "Use the e-mail and password of the Evo app. The password is used to sign in only and is not stored. Accounts created via Yandex ID need a password: set it with \"Forgot password\" in the Evo app.",
                 "data": {
-                    "password": "Password",
                     "email": "Login (email)",
+                    "password": "Password",
                     "region": "Region"
                 }
             },
-            "init": {
+            "reauth_confirm": {
+                "title": "Haier Evo: sign in again",
+                "description": "The saved sign-in for {email} is no longer valid. Enter the password of the Evo app: it is used to sign in only and is not stored.",
                 "data": {
-                    "password": "Password",
+                    "password": "Password"
+                }
+            },
+            "reconfigure": {
+                "title": "Haier Evo account",
+                "data": {
                     "email": "Login (email)",
+                    "password": "Password",
                     "region": "Region"
                 }
             }
+        },
+        "error": {
+            "invalid_auth": "Wrong e-mail or password",
+            "invalid_email": "Enter the e-mail of the Evo account",
+            "cannot_connect": "Haier Evo cloud is unavailable, try later",
+            "too_many_requests": "Haier Evo answered 429 (too many requests). Wait a few minutes and try again",
+            "unknown": "Unexpected error, see the log"
+        },
+        "abort": {
+            "already_configured": "This account is already configured",
+            "reauth_successful": "Signed in again",
+            "reconfigure_successful": "Settings updated",
+            "wrong_account": "To use another account, add a new integration entry"
         }
     },
     "entity": {
@@ -47,7 +62,14 @@
                             "position_5": "Fifth position",
                             "position_6": "Sixth position",
                             "position_7": "Seventh position",
-                            "auto": "Auto mode"
+                            "auto": "Auto mode",
+                            "far_left": "Far left",
+                            "left": "Left",
+                            "center": "Center",
+                            "right": "Right",
+                            "far_right": "Far right",
+                            "comfort_left": "Comfort flow left",
+                            "comfort_right": "Comfort flow right"
                         }
                     },
                     "swing_mode": {
@@ -62,7 +84,18 @@
                             "position_4": "Fourth position",
                             "position_5": "Fifth position",
                             "auto": "Auto mode",
-                            "special": "Raise/Lower"
+                            "special": "Raise/Lower",
+                            "angle_0": "0° (straight)",
+                            "angle_15": "15°",
+                            "angle_30": "30°",
+                            "angle_45": "45°",
+                            "angle_60": "60°",
+                            "angle_75": "75°",
+                            "angle_90": "90° (down)",
+                            "up": "Up",
+                            "down": "Down",
+                            "comfort_up": "Comfort flow up",
+                            "comfort_down": "Comfort flow down"
                         }
                     }
                 }
@@ -72,9 +105,94 @@
             "conditioner_eco_sensor": {
                 "state": {
                     "off": "Disabled",
-                    "outlining": "Outlining",
-                    "related": "Related",
+                    "outlining": "Airflow avoids people",
+                    "related": "Airflow follows people",
                     "on": "Active"
+                }
+            }
+        },
+        "water_heater": {
+            "water_heater": {
+                "state": {
+                    "off": "Off",
+                    "eco": "Eco (half of the tank)",
+                    "performance": "Max (whole tank)"
+                }
+            }
+        },
+        "sensor": {
+            "laundry_state": {
+                "state": {
+                    "off": "Off",
+                    "idle": "Idle",
+                    "running": "Running",
+                    "paused": "Paused",
+                    "finished": "Finished",
+                    "cancelled": "Cancelled"
+                }
+            }
+        }
+    },
+    "exceptions": {
+        "command_rejected": {
+            "message": "{device}: the Haier Evo cloud rejected the command (code {code})"
+        },
+        "command_failed": {
+            "message": "Haier Evo: no connection to the cloud, the command was not sent"
+        },
+        "locked_off": {
+            "message": "{device} is off: “{attribute}” cannot be changed until it is turned on"
+        },
+        "locked_mode": {
+            "message": "{device}: \"{attribute}\" cannot be changed in the \"{mode}\" mode"
+        },
+        "locked_alarm": {
+            "message": "{device} reports an error: “{attribute}” cannot be changed"
+        },
+        "value_not_allowed": {
+            "message": "{device}: {value} is not available for \"{attribute}\" now, available: {allowed}"
+        },
+        "locked_by": {
+            "message": "{device}: \"{attribute}\" cannot be changed while \"{cause}\" is on"
+        },
+        "laundry_control_off": {
+            "message": "{device}: the control of washers and dryers is off in the integration's options"
+        },
+        "laundry_remote_off": {
+            "message": "{device}: remote control is off at the machine, turn it on with its button"
+        },
+        "laundry_cannot_start": {
+            "message": "{device}: a program cannot be started now (state: {state})"
+        },
+        "laundry_cannot_pause": {
+            "message": "{device}: nothing to pause now (state: {state})"
+        },
+        "laundry_cannot_resume": {
+            "message": "{device}: nothing to resume now (state: {state})"
+        },
+        "laundry_cannot_cancel": {
+            "message": "{device}: nothing to cancel now (state: {state})"
+        },
+        "laundry_no_program": {
+            "message": "{device}: choose a program to start first"
+        },
+        "laundry_unknown_program": {
+            "message": "{device}: there is no program \"{program}\""
+        },
+        "laundry_busy": {
+            "message": "{device}: the previous command is still on its way"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Haier Evo settings",
+                "description": "Control of washing machines and dryers is a beta: it has not been checked on a real machine yet. When it is on, every machine gets a program to start and the buttons Start, Pause, Resume and Cancel program. A command goes out only while remote control is on at the machine.",
+                "data": {
+                    "laundry_control": "Control of washing machines and dryers (beta)"
+                },
+                "data_description": {
+                    "laundry_control": "Off: the machines are only shown, nothing is sent to them."
                 }
             }
         }

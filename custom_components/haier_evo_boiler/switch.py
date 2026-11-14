@@ -10,7 +10,7 @@ from .entity import HaierBoilerEntity
 
 
 async def async_setup_entry(hass, entry, async_add_entities) -> None:
-    adapters: list[HaierBoilerAdapter] = hass.data["haier_evo_boiler"][entry.entry_id]
+    adapters: list[HaierBoilerAdapter] = entry.runtime_data
     entities = []
     for adapter in adapters:
         entities.extend(
@@ -55,7 +55,7 @@ class HaierBoilerSwitch(HaierBoilerEntity, SwitchEntity):
         return self.adapter.as_bool(self.code)
 
     async def async_turn_on(self, **kwargs) -> None:
-        await self.hass.async_add_executor_job(self.adapter.send, self.code, True)
+        await self.adapter.send(self.code, True)
 
     async def async_turn_off(self, **kwargs) -> None:
-        await self.hass.async_add_executor_job(self.adapter.send, self.code, False)
+        await self.adapter.send(self.code, False)

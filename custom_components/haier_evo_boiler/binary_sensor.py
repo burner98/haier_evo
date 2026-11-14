@@ -14,7 +14,7 @@ from .entity import HaierBoilerEntity
 
 
 async def async_setup_entry(hass, entry, async_add_entities) -> None:
-    adapters: list[HaierBoilerAdapter] = hass.data["haier_evo_boiler"][entry.entry_id]
+    adapters: list[HaierBoilerAdapter] = entry.runtime_data
     entities = []
     for adapter in adapters:
         entities.extend(

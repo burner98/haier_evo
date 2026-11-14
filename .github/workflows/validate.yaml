@@ -1,18 +1,223 @@
 name: Validate
 
 on:
+  # a branch is checked once, by its pull request; a push runs only on main:
+  # what got merged, and the README badges come from it
   push:
+    branches: [main]
   pull_request:
-  # schedule:
-  #   - cron: "0 0 * * *"
   workflow_dispatch:
+  # Home Assistant releases and betas come out on Wednesdays: on Thursday the
+  # window of versions has moved, and main is checked against it without a commit
+  schedule:
+    - cron: "0 6 * * 4"
+
+# read-only token: the jobs only check the repository
+permissions:
+  contents: read
 
 jobs:
   validate-hacs:
     runs-on: "ubuntu-latest"
     steps:
-      - uses: "actions/checkout@v3"
+      # actions are pinned to commits, not to movable tags/branches
+      - uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"  # v7.0.1
+        with:
+          persist-credentials: false
       - name: HACS validation
-        uses: "hacs/action@main"
+        uses: "hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa"  # main as of 2026-06-08
         with:
           category: "integration"
+
+  hassfest:
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Home Assistant hassfest
+        uses: "home-assistant/actions/hassfest@86d4564712fa02543c808e3a693dd04f9d3f8361"  # master as of 2026-10-26
+
+  # ruff (the rules of pyproject.toml) and mypy: no type error over those
+  # of scripts/mypy-baseline.txt (scripts/check_types.py). Types are checked
+  # against one fixed release, not the moving window: a new release would move
+  # the baseline by itself. Raise LINT_HA together with the baseline.
+  lint:
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 10
+    env:
+      LINT_HA: "2026.11.0"
+    steps:
+      - uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: ruff and mypy
+        run: scripts/run_lint.sh "$LINT_HA"
+      # the baseline the code has on this release, made in the same container:
+      # download it to update scripts/mypy-baseline.txt without Docker
+      - name: mypy baseline of the code as it is
+        if: ${{ !cancelled() }}
+        run: scripts/run_lint.sh "$LINT_HA" --update > "$RUNNER_TEMP/mypy-baseline.txt"
+      - name: Upload the baseline
+        if: ${{ !cancelled() }}
+        uses: "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9"  # v7.0.2
+        with:
+          name: mypy-baseline
+          path: ${{ runner.temp }}/mypy-baseline.txt
+          retention-days: 7
+          overwrite: true
+
+  # The versions are worked out on every run (scripts/ha_versions.py): the two
+  # previous releases, the current one, the next one (beta, else the nightly
+  # build) and the minimum of hacs.json once the window has left it behind.
+  ha-versions:
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 5
+    outputs:
+      minimum: ${{ steps.resolve.outputs.minimum }}
+      prev2: ${{ steps.resolve.outputs.prev2 }}
+      prev1: ${{ steps.resolve.outputs.prev1 }}
+      current: ${{ steps.resolve.outputs.current }}
+      next: ${{ steps.resolve.outputs.next }}
+      matrix: ${{ steps.resolve.outputs.matrix }}
+    steps:
+      - uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Work out the Home Assistant versions
+        id: resolve
+        run: python3 scripts/ha_versions.py >> "$GITHUB_OUTPUT"
+      - name: Summary
+        run: python3 scripts/ha_versions.py --summary >> "$GITHUB_STEP_SUMMARY"
+
+  # One job per version, all at the same time, each in the Home Assistant
+  # container of that version: the tests (tests/) inside a real Home Assistant
+  # core with its own test harness, pytest-homeassistant-custom-component, of
+  # that release or the one before (scripts/install_test_env.py). A failing
+  # version does not stop the others; "next" may fail without failing its job.
+  # Every job writes its summary (the image and its digest, Python and the
+  # packages inside it, every test file with its counts and time, what failed)
+  # and annotations, and uploads its report for the results job.
+  tests:
+    name: "Home Assistant ${{ matrix.tag }} (${{ matrix.name }})"
+    needs: ha-versions
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.ha-versions.outputs.matrix) }}
+    steps:
+      - uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Checks
+        id: checks
+        continue-on-error: ${{ !matrix.blocking }}
+        env:
+          HA_TAG: ${{ matrix.tag }}
+          CHECKS_REPORT: ${{ runner.temp }}/checks/${{ matrix.channel }}.jsonl
+        run: scripts/run_checks.sh "$HA_TAG"
+      - name: Report
+        if: ${{ !cancelled() }}
+        env:
+          CHANNEL: ${{ matrix.channel }}
+          HA_TAG: ${{ matrix.tag }}
+          OUTCOME: ${{ steps.checks.outcome }}
+        run: >-
+          python3 scripts/ci_results.py job --report "$RUNNER_TEMP/checks/$CHANNEL.jsonl"
+          --channel "$CHANNEL" --tag "$HA_TAG" --outcome "$OUTCOME" --summary-file "$GITHUB_STEP_SUMMARY"
+      - name: Upload the report
+        if: ${{ !cancelled() }}
+        uses: "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9"  # v7.0.2
+        with:
+          name: checks-${{ matrix.channel }}
+          path: ${{ runner.temp }}/checks/${{ matrix.channel }}.jsonl
+          retention-days: 1
+          overwrite: true
+
+  # All versions together: the table of the run, the README badges and one
+  # verdict (fails when a version that blocks did not pass).
+  results:
+    name: Results
+    needs: [ha-versions, tests]
+    if: ${{ !cancelled() && needs.ha-versions.result == 'success' }}
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 5
+    outputs:
+      badges: ${{ steps.badges.outputs.badges }}
+    steps:
+      - uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download the reports
+        # a version without a report counts as not run; nothing to download is not an error here
+        continue-on-error: true
+        uses: "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333"  # v8.0.2
+        with:
+          pattern: checks-*
+          path: ${{ runner.temp }}/checks
+          merge-multiple: true
+      - name: Badges and summary
+        id: badges
+        env:
+          HA_VERSIONS: ${{ toJSON(needs.ha-versions.outputs) }}
+        run: |
+          python3 scripts/ci_results.py run --reports "$RUNNER_TEMP/checks" >> "$GITHUB_OUTPUT"
+          python3 scripts/ci_results.py run --reports "$RUNNER_TEMP/checks" --summary >> "$GITHUB_STEP_SUMMARY"
+      - name: Verdict
+        env:
+          HA_VERSIONS: ${{ toJSON(needs.ha-versions.outputs) }}
+        run: python3 scripts/ci_results.py run --reports "$RUNNER_TEMP/checks" --verdict
+
+  # The README badges show main: its results go to the "badges" branch as
+  # shields.io endpoint files (tests.json and one ha-<channel>.json per
+  # version), on a push to main, on schedule and by hand, never from a pull
+  # request. The only job with a writable token; it runs no code of the
+  # repository.
+  badges:
+    needs: results
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && needs.results.outputs.badges != '' }}
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    concurrency:
+      group: badges
+    steps:
+      - name: Publish to the badges branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BADGES: ${{ needs.results.outputs.badges }}
+        run: |
+          set -eu
+          remote="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git init -q badges && cd badges
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # a new commit on top of the branch, never a force push
+          if git -c http.extraheader="$auth" ls-remote --exit-code --heads "$remote" badges >/dev/null; then
+            git -c http.extraheader="$auth" fetch -q --depth=1 "$remote" badges
+            git checkout -q -B badges FETCH_HEAD
+          else
+            git checkout -q --orphan badges
+          fi
+          # the branch holds exactly the badges of this run: one no longer made goes away
+          rm -f ./*.json
+          python3 - <<'EOF'
+          import json, os, re
+          for name, badge in json.loads(os.environ["BADGES"]).items():
+              if not re.fullmatch(r"[a-z0-9-]+\.json", name):
+                  raise SystemExit(f"unexpected badge file: {name!r}")
+              with open(name, "w", encoding="utf-8") as file:
+                  file.write(json.dumps(badge, ensure_ascii=False) + "\n")
+          EOF
+          git add -A
+          if git diff --cached --quiet; then
+            echo "The badges did not change"
+            exit 0
+          fi
+          git commit -q -m "Badges for $GITHUB_SHA"
+          git -c http.extraheader="$auth" push -q "$remote" HEAD:refs/heads/badges
+          head -n 20 ./*.json

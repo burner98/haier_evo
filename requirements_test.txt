@@ -1,0 +1,6 @@
+# What the tests need besides Home Assistant and its test harness,
+# pytest-homeassistant-custom-component: scripts/install_test_env.py picks the
+# harness that fits the Home Assistant installed and installs this file with it.
+#   python3 scripts/install_test_env.py
+ruff==0.17.4
+mypy==2.4.1
